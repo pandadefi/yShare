@@ -87,16 +87,24 @@ contract Share {
     }
 
     function withdraw(address _vault, uint256 amount) public {
+        withdraw(_vault, amount, true);
+    }
+
+    function withdraw(address _vault, uint256 amount, bool distribute) public {
         VaultAPI vault = VaultAPI(_vault);
-        uint256 pricePerShare = vault.pricePerShare();
         Deposit storage d = deposits[msg.sender][_vault];
-        _distributeTokens(d, vault, pricePerShare);
+        if (distribute) { // if _distributeTokens is fucked do not lock tokens.
+            uint256 pricePerShare = vault.pricePerShare();
+            _distributeTokens(d, vault, pricePerShare);
+        }
         
-        if (amount > d.amount) {
+        if (amount >= d.amount) {
             amount = d.amount;
+            delete deposits[msg.sender][_vault];
+        } else {
+            d.amount -= amount;
         }
 
-        d.amount -= amount;
         vault.transfer(msg.sender, amount);
     }
 
@@ -117,6 +125,9 @@ contract Share {
         uint256 decimalPrecision = 10 ** vault.decimals();
         uint256 increaseInUnderlying = (d.amount * pricePerShare - d.amount * d.pricePerShare) / decimalPrecision;
         uint256 toDecrease = 0;
+        if (increaseInUnderlying == 0) {
+            return true;
+        }
 
         for(uint256 i=0; i < d.beneficiaries.length; i++) {
             uint256 amountInUnderlying = increaseInUnderlying * d.beneficiaries[i].amount / MAX_DISTRIBUTED;
