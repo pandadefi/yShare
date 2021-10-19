@@ -3,6 +3,7 @@ pragma solidity ^0.8.9;
 pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 interface VaultAPI is IERC20 {
     function name() external view returns (string calldata);
@@ -46,9 +47,20 @@ interface VaultAPI is IERC20 {
     function maxAvailableShares() external view returns (uint256);
 }
 
+interface RegistryAPI {
+    function governance() external view returns (address);
+
+    function latestVault(address token) external view returns (address);
+
+    function numVaults(address token) external view returns (uint256);
+
+    function vaults(address token, uint256 deploymentId) external view returns (address);
+}
+
 
 contract Share {
     uint256 MAX_DISTRIBUTED = 10_000;
+    RegistryAPI public immutable registry;
 
     struct Beneficiary {
         address account;
@@ -62,6 +74,10 @@ contract Share {
         Beneficiary[] beneficiaries;
     }
 
+    constructor(address _registry) {
+        registry = RegistryAPI(_registry);
+    }
+    
     mapping(address => mapping(address => Deposit)) public deposits;
     mapping(address => mapping(address => uint256)) public claimable;
 
@@ -73,6 +89,26 @@ contract Share {
     function deposit(address _vault, uint256 amount) public {
         VaultAPI vault = VaultAPI(_vault);
         vault.transferFrom(msg.sender, address(this), amount);
+        uint256 pricePerShare = vault.pricePerShare();
+
+        if (deposits[msg.sender][_vault].exists == false) {
+            deposits[msg.sender][_vault].amount = amount;
+            deposits[msg.sender][_vault].pricePerShare = pricePerShare;
+            deposits[msg.sender][_vault].exists = true;
+        } else {
+            Deposit storage d = deposits[msg.sender][_vault];
+            _distributeTokens(d, vault, pricePerShare);
+            d.amount += amount;
+        }
+    }
+
+    function depositWant(IERC20 _token, uint256 amount) public {
+        SafeERC20.safeTransferFrom(_token, msg.sender, address(this), amount);
+        address _vault = registry.latestVault(address(_token));
+        VaultAPI vault = VaultAPI(_vault);
+        SafeERC20.safeApprove(_token, _vault, amount);
+        amount = vault.deposit(amount);
+
         uint256 pricePerShare = vault.pricePerShare();
 
         if (deposits[msg.sender][_vault].exists == false) {

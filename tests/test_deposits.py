@@ -28,6 +28,28 @@ def test_deposit(token, vault, share, deployer):
     )
 
 
+def test_deposit_want(token, vault, share, deployer, registry):
+    amount = 10_000 * 10 ** 18
+    token.mint(amount * 100, {"from": deployer})
+    token.approve(share, MAX_UINT256, {"from": deployer})
+    registry.newRelease(vault, {"from": deployer})
+    registry.endorseVault(vault, {"from": deployer})
+    share.depositWant(token, amount, {"from": deployer})
+    assert token.balanceOf(vault) == amount
+    assert vault.balanceOf(share) == amount
+
+    token.mint(amount / 10, {"from": vault})  # increase price per share
+    share.depositWant(token, amount, {"from": deployer})
+    assert (
+        pytest.approx(share.deposits(deployer, vault).dict()["amount"])
+        == amount + amount / 1.1
+    )
+    assert (
+        share.deposits(deployer, vault).dict()["pricePerShare"] == 1100000000000000000
+    )
+    assert pytest.approx(vault.balanceOf(share)) == amount + amount / 1.1
+
+
 def test_add_beneficiaries(token, vault, share, deployer, user, user2):
     amount = 10_000 * 10 ** 18
     token.mint(amount * 100, {"from": deployer})
