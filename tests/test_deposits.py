@@ -120,9 +120,9 @@ def test_deposit_add_beneficiaries_claim(token, vault, share, deployer, user, us
 
     share.setBeneficiaries(
         vault, [(user, 9000), (user2, 1000)], {"from": deployer}
-    )  # give 50% of yield
+    )  # give 100% of yield
     token.mint(amount / 20, {"from": vault})  # increase price per share
-    share.distributeTokens(vault, deployer)
+    share.distributeTokens["address,address"](vault, deployer)
     deposit = share.deposits(deployer, vault).dict()
 
     assert deposit["pricePerShare"] == 1050000000000000000
@@ -139,3 +139,47 @@ def test_deposit_add_beneficiaries_claim(token, vault, share, deployer, user, us
     assert pytest.approx(token.balanceOf(user), rel=10e-3) == 45 * 10 ** 19
     assert pytest.approx(token.balanceOf(user2), rel=10e-3) == 5 * 10 ** 19
     assert pytest.approx(token.balanceOf(deployer), rel=10e-18) == amount
+
+
+def test_deposit_add_beneficiaries_claim_mulitple_deposits(
+    token, vault, share, deployer, user, user2, user3
+):
+    amount = 10_000 * 10 ** 18
+    # deposit from deployer
+    token.mint(amount, {"from": deployer})
+    token.approve(vault, MAX_UINT256, {"from": deployer})
+    vault.deposit(amount, {"from": deployer})
+    vault.approve(share, MAX_UINT256, {"from": deployer})
+    share.deposit(vault, amount, {"from": deployer})
+
+    # deposit from user3
+    token.mint(amount, {"from": user3})
+    token.approve(vault, MAX_UINT256, {"from": user3})
+    vault.deposit(amount, {"from": user3})
+    vault.approve(share, MAX_UINT256, {"from": user3})
+    share.deposit(vault, amount, {"from": user3})
+
+    share.setBeneficiaries(vault, [(user, 4500), (user2, 500)], {"from": deployer})
+    share.setBeneficiaries(vault, [(user, 4500), (user2, 500)], {"from": user3})
+
+    token.mint(amount / 10, {"from": vault})  # increase price per share
+    share.distributeTokens["address,address[]"](vault, [deployer, user3])
+    deposit = share.deposits(deployer, vault).dict()
+
+    assert deposit["pricePerShare"] == 1050000000000000000
+    assert pytest.approx(deposit["amount"], rel=10e-3) == 97.5 * 10 ** 20
+
+    share.claimTokens(vault, {"from": user})
+    share.claimTokens(vault, {"from": user2})
+    share.withdraw(vault, deposit["amount"], {"from": deployer})
+    share.withdraw(vault, deposit["amount"], {"from": user3})
+
+    vault.withdraw({"from": user})
+    vault.withdraw({"from": user2})
+    vault.withdraw({"from": deployer})
+    vault.withdraw({"from": user3})
+
+    assert pytest.approx(token.balanceOf(user), rel=10e-3) == 45 * 10 ** 19
+    assert pytest.approx(token.balanceOf(user2), rel=10e-3) == 5 * 10 ** 19
+    assert pytest.approx(token.balanceOf(deployer), rel=10e-18) == amount * 1.025
+    assert pytest.approx(token.balanceOf(user3), rel=10e-18) == amount * 1.025

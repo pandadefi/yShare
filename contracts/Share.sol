@@ -171,6 +171,17 @@ contract Share {
 
     }
 
+    function distributeTokens(address _vault, address[] calldata accounts) public {
+        VaultAPI vault = VaultAPI(_vault);
+        uint256 pricePerShare = vault.pricePerShare();
+
+        for(uint256 i= 0; i < accounts.length; i++) {
+            Deposit storage d = deposits[accounts[i]][_vault];
+            require(d.exists);
+            _distributeTokens(accounts[i], d, vault, pricePerShare);
+        }
+    }
+
     function _distributeTokens(address philanthropist, Deposit storage d, VaultAPI vault, uint256 pricePerShare) internal returns(bool) {
         if(d.pricePerShare >= pricePerShare) {
             return true;
