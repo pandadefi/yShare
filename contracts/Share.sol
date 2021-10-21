@@ -74,6 +74,20 @@ contract Share {
         Beneficiary[] beneficiaries;
     }
 
+    event Deposited (
+        address indexed from,
+        address vault,
+        uint256 amount
+    );
+
+    event Withdrawal(
+        address indexed from,
+        address vault,
+        uint256 amount
+    );
+
+    event YieldDistributed(address philanthropist, address vault, uint256 distributed);
+
     constructor(address _registry) {
         registry = RegistryAPI(_registry);
     }
@@ -97,9 +111,10 @@ contract Share {
             deposits[msg.sender][_vault].exists = true;
         } else {
             Deposit storage d = deposits[msg.sender][_vault];
-            _distributeTokens(d, vault, pricePerShare);
+            _distributeTokens(msg.sender, d, vault, pricePerShare);
             d.amount += amount;
         }
+        emit Deposited(msg.sender, address(vault), amount);
     }
 
     function depositWant(IERC20 _token, uint256 amount) public {
@@ -117,9 +132,10 @@ contract Share {
             deposits[msg.sender][_vault].exists = true;
         } else {
             Deposit storage d = deposits[msg.sender][_vault];
-            _distributeTokens(d, vault, pricePerShare);
+            _distributeTokens(msg.sender, d, vault, pricePerShare);
             d.amount += amount;
         }
+        emit Deposited(msg.sender, address(vault), amount);
     }
 
     function withdraw(address _vault, uint256 amount) public {
@@ -131,7 +147,7 @@ contract Share {
         Deposit storage d = deposits[msg.sender][_vault];
         if (distribute) { // if _distributeTokens is fucked do not lock tokens.
             uint256 pricePerShare = vault.pricePerShare();
-            _distributeTokens(d, vault, pricePerShare);
+            _distributeTokens(msg.sender, d, vault, pricePerShare);
         }
         
         if (amount >= d.amount) {
@@ -142,18 +158,20 @@ contract Share {
         }
 
         vault.transfer(msg.sender, amount);
+        emit Withdrawal(msg.sender, address(vault), amount);
     }
 
     function distributeTokens(address _vault, address account) public {
         VaultAPI vault = VaultAPI(_vault);
         uint256 pricePerShare = vault.pricePerShare();
-        Deposit storage d = deposits[msg.sender][_vault];
+        Deposit storage d = deposits[account][_vault];
 
         require(d.exists);
-        _distributeTokens(d, vault, pricePerShare);
+        _distributeTokens(account, d, vault, pricePerShare);
+
     }
 
-    function _distributeTokens(Deposit storage d, VaultAPI vault, uint256 pricePerShare) internal returns (bool) {
+    function _distributeTokens(address philanthropist, Deposit storage d, VaultAPI vault, uint256 pricePerShare) internal returns(bool) {
         if(d.pricePerShare >= pricePerShare) {
             return true;
         }
@@ -172,9 +190,10 @@ contract Share {
             claimable[d.beneficiaries[i].account][address(vault)] += amountInVaultToken;
             toDecrease += amountInVaultToken;
         }
+        emit YieldDistributed(philanthropist, address(vault), toDecrease);
+
         d.amount -= toDecrease;
         d.pricePerShare = pricePerShare;
-
         return true;
     }
 
@@ -183,7 +202,7 @@ contract Share {
         require(d.exists, "!exists");
         VaultAPI vault = VaultAPI(_vault);
         uint256 pricePerShare = vault.pricePerShare();
-        _distributeTokens(d, vault, pricePerShare);
+        _distributeTokens(msg.sender, d, vault, pricePerShare);
 
         delete deposits[msg.sender][_vault].beneficiaries;
         uint256 totalDistributed = 0;
