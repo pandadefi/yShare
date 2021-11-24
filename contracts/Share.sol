@@ -127,6 +127,11 @@ contract Share {
         emit Deposited(msg.sender, address(vault), amount);
     }
 
+    function depositAndSet(address _vault, uint256 amount, Beneficiary[] calldata _beneficiaries) public {
+        deposit(_vault, amount);
+        _setBeneficiaries(_vault, _beneficiaries, false);
+    }
+
     /// @notice Deposit token to the contract
     /// @dev Find the best vault to deposit the token and keep the yToken for the depositor
     /// @param _token The token to deposit
@@ -150,6 +155,13 @@ contract Share {
             d.amount += amount;
         }
         emit Deposited(msg.sender, address(vault), amount);
+    }
+
+    function depositWantAndSet(IERC20 _token, uint256 amount, Beneficiary[] calldata _beneficiaries) public {
+        depositWant(_token, amount);
+        address _vault = registry.latestVault(address(_token));
+
+        _setBeneficiaries(_vault, _beneficiaries, false);
     }
 
     function withdraw(address _vault, uint256 amount) public {
@@ -237,11 +249,17 @@ contract Share {
     /// @param _vault The vault address
     /// @param _beneficiaries The list of beneficiaries that will recieve earned tokens
     function setBeneficiaries(address _vault, Beneficiary[] calldata _beneficiaries) public {
+        _setBeneficiaries(_vault, _beneficiaries, true);
+    }
+
+    function _setBeneficiaries(address _vault, Beneficiary[] calldata _beneficiaries, bool distribute) public {
         Deposit storage d = deposits[msg.sender][_vault];
         require(d.exists, "!exists");
         VaultAPI vault = VaultAPI(_vault);
         uint256 pricePerShare = vault.pricePerShare();
-        _distributeTokens(msg.sender, d, vault, pricePerShare);
+        if (distribute) {
+            _distributeTokens(msg.sender, d, vault, pricePerShare);
+        }
 
         delete deposits[msg.sender][_vault].beneficiaries;
         uint256 totalDistributed = 0;

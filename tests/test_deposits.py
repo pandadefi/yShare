@@ -185,9 +185,7 @@ def test_deposit_add_beneficiaries_claim_mulitple_deposits(
     assert pytest.approx(token.balanceOf(user3), rel=10e-18) == amount * 1.025
 
 
-def test_change_beneficiaries(
-    token, vault, share, deployer, user, user2
-):
+def test_change_beneficiaries(token, vault, share, deployer, user, user2):
     amount = 10_000 * 10 ** 18
     # deposit from deployer
     token.mint(amount, {"from": deployer})
@@ -207,3 +205,37 @@ def test_change_beneficiaries(
     beneficiaries = share.getBeneficiaries(deployer, vault)
     assert beneficiaries[0][0] == user
     assert beneficiaries[0][1] == 500
+
+
+def test_deposit_and_set(token, vault, share, deployer, user, user2):
+    amount = 10_000 * 10 ** 18
+    # deposit from deployer
+    token.mint(amount, {"from": deployer})
+    token.approve(vault, MAX_UINT256, {"from": deployer})
+    vault.deposit(amount, {"from": deployer})
+    vault.approve(share, MAX_UINT256, {"from": deployer})
+    share.depositAndSet(vault, amount, [(user, 4500), (user2, 500)], {"from": deployer})
+    beneficiaries = share.getBeneficiaries(deployer, vault)
+    assert beneficiaries[0][0] == user
+    assert beneficiaries[0][1] == 4500
+    deposit = share.deposits(deployer, vault).dict()
+    assert deposit["amount"] == amount
+
+
+def test_deposit_want_and_set(token, vault, share, deployer, registry, user, user2):
+    amount = 10_000 * 10 ** 18
+    token.mint(amount * 100, {"from": deployer})
+    token.approve(share, MAX_UINT256, {"from": deployer})
+    registry.newRelease(vault, {"from": deployer})
+    registry.endorseVault(vault, {"from": deployer})
+    share.depositWantAndSet(
+        token, amount, [(user, 4500), (user2, 500)], {"from": deployer}
+    )
+
+    assert token.balanceOf(vault) == amount
+    assert vault.balanceOf(share) == amount
+    beneficiaries = share.getBeneficiaries(deployer, vault)
+    assert beneficiaries[0][0] == user
+    assert beneficiaries[0][1] == 4500
+    deposit = share.deposits(deployer, vault).dict()
+    assert deposit["amount"] == amount
