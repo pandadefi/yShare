@@ -183,3 +183,27 @@ def test_deposit_add_beneficiaries_claim_mulitple_deposits(
     assert pytest.approx(token.balanceOf(user2), rel=10e-3) == 5 * 10 ** 19
     assert pytest.approx(token.balanceOf(deployer), rel=10e-18) == amount * 1.025
     assert pytest.approx(token.balanceOf(user3), rel=10e-18) == amount * 1.025
+
+
+def test_change_beneficiaries(
+    token, vault, share, deployer, user, user2
+):
+    amount = 10_000 * 10 ** 18
+    # deposit from deployer
+    token.mint(amount, {"from": deployer})
+    token.approve(vault, MAX_UINT256, {"from": deployer})
+    vault.deposit(amount, {"from": deployer})
+    vault.approve(share, MAX_UINT256, {"from": deployer})
+    share.deposit(vault, amount, {"from": deployer})
+
+    share.setBeneficiaries(vault, [(user, 4500), (user2, 500)], {"from": deployer})
+    beneficiaries = share.getBeneficiaries(deployer, vault)
+    assert beneficiaries[0][0] == user
+    assert beneficiaries[0][1] == 4500
+    assert beneficiaries[1][0] == user2
+    assert beneficiaries[1][1] == 500
+
+    beneficiaries = share.setBeneficiaries(vault, [(user, 500)], {"from": deployer})
+    beneficiaries = share.getBeneficiaries(deployer, vault)
+    assert beneficiaries[0][0] == user
+    assert beneficiaries[0][1] == 500
