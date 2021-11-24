@@ -2,6 +2,10 @@
 pragma solidity ^0.8.9;
 pragma experimental ABIEncoderV2;
 
+/// @title Distribute yearn earned tokens to others 
+/// @author PandaDefi
+/// @notice You can use this contract to distribute some of the yearn yield to others
+
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -95,11 +99,17 @@ contract Share {
     mapping(address => mapping(address => Deposit)) public deposits;
     mapping(address => mapping(address => uint256)) public claimable;
 
-
+    /// @notice Get the list of beneficiaries for a depositor and a vault.
+    /// @param account The depositor address
+    /// @param vault The vault address
+    /// @return The list of beneficiaries addresses
     function getBeneficiaries(address account, address vault) public view returns(Beneficiary[] memory) {
         return deposits[account][vault].beneficiaries;
     }
 
+    /// @notice Deposit yToken to the contract
+    /// @param _vault The yToken vault
+    /// @param amount The amount to deposit
     function deposit(address _vault, uint256 amount) public {
         VaultAPI vault = VaultAPI(_vault);
         vault.transferFrom(msg.sender, address(this), amount);
@@ -117,6 +127,10 @@ contract Share {
         emit Deposited(msg.sender, address(vault), amount);
     }
 
+    /// @notice Deposit token to the contract
+    /// @dev Find the best vault to deposit the token and keep the yToken for the depositor
+    /// @param _token The token to deposit
+    /// @param amount The amount of tokens to deposit
     function depositWant(IERC20 _token, uint256 amount) public {
         SafeERC20.safeTransferFrom(_token, msg.sender, address(this), amount);
         address _vault = registry.latestVault(address(_token));
@@ -142,6 +156,10 @@ contract Share {
         withdraw(_vault, amount, true);
     }
 
+    /// @notice Withdraw yToken
+    /// @param _vault The vault address to withdraw from
+    /// @param amount The amount of tokens to withdraw
+    /// @param distribute set to false it will skip the distribution to beneficiaries
     function withdraw(address _vault, uint256 amount, bool distribute) public {
         VaultAPI vault = VaultAPI(_vault);
         Deposit storage d = deposits[msg.sender][_vault];
@@ -161,6 +179,9 @@ contract Share {
         emit Withdrawal(msg.sender, address(vault), amount);
     }
 
+    /// @notice Distribute earned tokens
+    /// @param _vault The vault address to distribute from
+    /// @param account The despositor address the beneficiaries would like to get earned token from
     function distributeTokens(address _vault, address account) public {
         VaultAPI vault = VaultAPI(_vault);
         uint256 pricePerShare = vault.pricePerShare();
@@ -171,6 +192,9 @@ contract Share {
 
     }
 
+    /// @notice Distribute earned tokens
+    /// @param _vault The vault address to distribute from
+    /// @param accounts The despositor address list the beneficiaries would like to get earned token from
     function distributeTokens(address _vault, address[] calldata accounts) public {
         VaultAPI vault = VaultAPI(_vault);
         uint256 pricePerShare = vault.pricePerShare();
@@ -208,6 +232,10 @@ contract Share {
         return true;
     }
 
+    /// @notice Set benficiaries for a vault token address
+    /// @dev benefits are distributed up to 10_0000 (MAX_DISTRIBUTED), non distributed yield remains to the depositor. 
+    /// @param _vault The vault address
+    /// @param _beneficiaries The list of beneficiaries that will recieve earned tokens
     function setBeneficiaries(address _vault, Beneficiary[] calldata _beneficiaries) public {
         Deposit storage d = deposits[msg.sender][_vault];
         require(d.exists, "!exists");
@@ -224,6 +252,9 @@ contract Share {
         require(totalDistributed <= MAX_DISTRIBUTED, ">max");
     }
 
+    /// @notice Function to be claimed by a beneficiary
+    /// @dev beneficiary should call distributeTokens before calling claimTokens 
+    /// @param _vault The vault address
     function claimTokens(address _vault) public {
         uint256 amount = claimable[msg.sender][_vault];
         claimable[msg.sender][_vault] = 0;
